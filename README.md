@@ -1,5 +1,5 @@
 Database at SecurityCamp2018
 
-- B+-tree by C++ (now)
+- B+-tree in C++ (now)
 - WAL (yet)
 - Transaction (yet)
