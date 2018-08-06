@@ -3,6 +3,29 @@
 #include <iostream>
 #include <string>
 using std::string;
+const unsigned lnum = 2;
+const unsigned inum = 2;
+
+class NodeBase
+{
+public:
+  unsigned num_keys = 0;
+};
+
+class LeafNode : public NodeBase
+{
+public:
+  int keys[lnum];
+  int nval[lnum];
+  string strval[lnum];
+};
+
+class InnerNode : public NodeBase
+{
+public:
+  int keys[inum];
+  NodeBase *children[inum + 1];
+};
 
 class BPlusTree
 {
@@ -10,28 +33,14 @@ private:
   const static unsigned lnum = 2;
   const static unsigned inum = 2;
   unsigned depth;
-  void *root;
-  void *current_leaf;
-
-  struct LeafNode
-  {
-    unsigned num_keys = 0; //現在入ってる要素の数
-    int keys[lnum];        //keyの格納場所
-    int nval[lnum];        //int型のvalueの格納場所
-    string strval[lnum];   //string型のvalueの格納場所
-  };
-  struct InnerNode
-  {
-    unsigned num_keys = 0;    //現在入ってる要素の数
-    int keys[inum];           //keyの格納場所
-    void *children[inum + 1]; //子のinnerまたはleafへのポインタの集合。ファンアウトみたいな？
-  };
+  NodeBase *root;
+  NodeBase *current_leaf;
 
   struct InsertionResult
   {
-    int key;     //insertしたkeyの値
-    void *left;  //左に何がいるのか
-    void *right; //右に何がいるのか
+    int key;         //insertしたkeyの値
+    NodeBase *left;  //左に何がいるのか
+    NodeBase *right; //右に何がいるのか
   };
 
   unsigned leaf_position_for(const int &key, const int keys[], unsigned num_keys)
@@ -203,7 +212,7 @@ public:
   {
     //keyがあるかcheck。またその値が欲しければ第2, 3引数に変数を入れる。
     InnerNode *inner;
-    void *node = root;
+    NodeBase *node = root;
     unsigned d = depth, index;
     while (d-- != 0)
     {
