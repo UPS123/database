@@ -8,20 +8,37 @@ const unsigned inum = 2;
 
 struct NodeBase
 {
-  unsigned num_keys = 0;
+  virtual ~NodeBase() {}
 };
 
 struct LeafNode : NodeBase
 {
-  int keys[lnum];
-  int nval[lnum];
-  string strval[lnum];
+  unsigned num_keys;
+  int *keys;
+  int *nval;
+  string *strval;
+  LeafNode() : num_keys(0), keys(new int[lnum]), nval(new int[lnum]), strval(new string[lnum]) {}
+  ~LeafNode()
+  {
+    delete keys;
+    delete[] nval;
+    delete[] strval;
+  }
 };
 
 struct InnerNode : NodeBase
 {
-  int keys[inum];
-  NodeBase *children[inum + 1];
+  unsigned num_keys;
+  int *keys;
+  NodeBase **children;
+  InnerNode() : num_keys(0), keys(new int[inum]), children(new NodeBase *[inum + 1]) {}
+  ~InnerNode()
+  {
+    delete keys;
+    for (unsigned i = 0; i < inum + 1; ++i)
+      delete children[i];
+    delete[] children;
+  }
 };
 
 class BPlusTree
