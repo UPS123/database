@@ -6,23 +6,20 @@ using std::string;
 const unsigned lnum = 2;
 const unsigned inum = 2;
 
-class NodeBase
+struct NodeBase
 {
-public:
   unsigned num_keys = 0;
 };
 
-class LeafNode : public NodeBase
+struct LeafNode : NodeBase
 {
-public:
   int keys[lnum];
   int nval[lnum];
   string strval[lnum];
 };
 
-class InnerNode : public NodeBase
+struct InnerNode : NodeBase
 {
-public:
   int keys[inum];
   NodeBase *children[inum + 1];
 };
@@ -200,6 +197,10 @@ private:
     return was_split;
   }
 
+  void leaf_delete()
+  {
+  }
+
 public:
   BPlusTree()
   {
@@ -274,6 +275,14 @@ public:
     }
   }
 
+  void delete_data(int &key)
+  {
+  }
+
+  LeafNode select(int &minkey, int &maxkey)
+  {
+  }
+
   unsigned sizeof_inner_node() const
   {
     //innerのメモリサイズ
@@ -284,13 +293,5 @@ public:
   {
     //leafのメモリサイズ
     return sizeof(LeafNode);
-  }
-
-  void delete_data(int &key)
-  {
-  }
-
-  LeafNode select(int &minkey, int &maxkey)
-  {
   }
 };
