@@ -13,7 +13,7 @@ struct NodeBase
 
 struct LeafNode : NodeBase
 {
-  unsigned num_keys;
+  unsigned num_keys; //node内のkeyの数
   int *keys;
   int *nval;
   string *strval;
@@ -41,6 +41,18 @@ struct InnerNode : NodeBase
   }
 };
 
+struct InsertionResult
+{
+  int key;         //insertしたkeyの値
+  NodeBase *left;  //左に何がいるのか
+  NodeBase *right; //右に何がいるのか
+  ~InsertionResult()
+  {
+    delete left;
+    delete right;
+  }
+};
+
 class BPlusTree
 {
 private:
@@ -49,13 +61,6 @@ private:
   unsigned depth;
   NodeBase *root;
   NodeBase *current_leaf;
-
-  struct InsertionResult
-  {
-    int key;         //insertしたkeyの値
-    NodeBase *left;  //左に何がいるのか
-    NodeBase *right; //右に何がいるのか
-  };
 
   unsigned leaf_position_for(const int &key, const int keys[], unsigned num_keys)
   {
