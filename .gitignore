@@ -1,5 +1,5 @@
 .DS_Store
 .vscode/
 .commit_template
-boost/
+cybozulib/
 book.md

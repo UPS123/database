@@ -1,68 +1,56 @@
 //　reference -> https://en.wikibooks.org/wiki/Algorithm_Implementation/Trees/B%2B_tree
 
 #include <iostream>
+#include <vector>
+#include <memory>
 #include <string>
-using std::string;
 const unsigned lnum = 2;
 const unsigned inum = 2;
 
 struct NodeBase
 {
+  unsigned num_keys; //node内のkeyの数
+  std::vector<int> keys;
+  NodeBase(int num) : num_keys(0), keys(std::vector<int>(num)) {}
   virtual ~NodeBase() {}
 };
 
 struct LeafNode : NodeBase
 {
-  unsigned num_keys; //node内のkeyの数
-  int *keys;
-  int *nval;
-  string *strval;
-  LeafNode() : num_keys(0), keys(new int[lnum]), nval(new int[lnum]), strval(new string[lnum]) {}
-  ~LeafNode()
-  {
-    delete keys;
-    delete[] nval;
-    delete[] strval;
-  }
+  std::vector<int> nval;
+  std::vector<std::string> strval;
+  LeafNode() : NodeBase(lnum), nval(std::vector<int>(lnum)), strval(std::vector<std::string>(lnum)) {}
+  ~LeafNode() {}
 };
 
 struct InnerNode : NodeBase
 {
-  unsigned num_keys;
-  int *keys;
-  NodeBase **children;
-  InnerNode() : num_keys(0), keys(new int[inum]), children(new NodeBase *[inum + 1]) {}
-  ~InnerNode()
-  {
-    delete keys;
-    for (unsigned i = 0; i < inum + 1; ++i)
-      delete children[i];
-    delete[] children;
-  }
+  std::vector<std::shared_ptr<NodeBase>> children;
+  InnerNode() : NodeBase(inum), children(std::vector<std::shared_ptr<NodeBase>>(inum + 1)) {}
+  ~InnerNode() {}
 };
 
 struct InsertionResult
 {
-  int key;         //insertしたkeyの値
-  NodeBase *left;  //左に何がいるのか
-  NodeBase *right; //右に何がいるのか
+  int key;                       //insertしたkeyの値
+  std::weak_ptr<NodeBase> left;  //左に何がいるのか
+  std::weak_ptr<NodeBase> right; //右に何がいるのか
+  InsertionResult() {}
   ~InsertionResult()
   {
-    delete left;
-    delete right;
+    //delete left;
+    //delete right;
   }
 };
 
 class BPlusTree
 {
 private:
-  const static unsigned lnum = 2;
-  const static unsigned inum = 2;
   unsigned depth;
-  NodeBase *root;
-  NodeBase *current_leaf;
+  std::shared_ptr<NodeBase> root;
+  std::weak_ptr<NodeBase> current_node;
 
-  unsigned leaf_position_for(const int &key, const int keys[], unsigned num_keys)
+  unsigned leaf_position_for(const int &key, const std::vector<int> &keys, const unsigned num_keys)
   {
     //leaf内にある複数の値の中から特定のある値の場所を見つける（orなければある値を入れたい場所を見つける）
     //二分探索で高速化もありだが別になくてもいい気がするので線形探索
@@ -72,7 +60,7 @@ private:
     return k;
   }
 
-  unsigned inner_position_for(const int &key, const int keys[], unsigned num_keys)
+  unsigned inner_position_for(const int &key, const std::vector<int> &keys, const unsigned num_keys)
   {
     //inner内にある複数の値の中から特定のある値の場所を見つける（orなければある値を入れたい場所を見つける）
     unsigned k = 0;
@@ -81,7 +69,7 @@ private:
     return k;
   }
 
-  static void leaf_insert_nonfull(LeafNode *node, int &key, int &nval, string &strval, unsigned index)
+  static void leaf_insert_nonfull(LeafNode *node, const int &key, const int &nval, const std::string &strval, const unsigned index)
   {
     //分割しなくてもいけるとき、nodeに添字がindexの場所にkey, num, sを入れる
     if ((index < lnum) && (node->num_keys != 0) && (node->keys[index] == key))
@@ -106,7 +94,7 @@ private:
     }
   }
 
-  bool leaf_insert(LeafNode *node, int &key, int &nval, string &strval, InsertionResult *result)
+  bool leaf_insert(LeafNode *node, const int &key, const int &nval, const std::string &strval, InsertionResult *result)
   {
     //leafにkey,nval,strvalを挿入して結果をresultに。その時分割したかどうか返す
     bool was_split = false;                                          //そのnodeが容量overかどうかcheck
@@ -114,9 +102,9 @@ private:
     if (node->num_keys == lnum)
     {
       //nodeの容量がいっぱいなら
-      unsigned threshhold = (lnum + 1) / 2;                //閾値というか要素数の真ん中の値（切り上げ）
-      LeafNode *new_sibling = new LeafNode();              //分割したnodeのindexが大きい方（兄）
-      new_sibling->num_keys = node->num_keys - threshhold; //さっき作った兄の要素数を入れる
+      unsigned threshhold = (lnum + 1) / 2;                                 //閾値というか要素数の真ん中の値（切り上げ）
+      std::unique_ptr<LeafNode> new_sibling = std::make_unique<LeafNode>(); //分割したnodeのindexが大きい方（兄）
+      new_sibling->num_keys = node->num_keys - threshhold;                  //さっき作った兄の要素数を入れる
       for (unsigned j = 0; j < new_sibling->num_keys; ++j)
       {
         //兄の方に入れる予定のkey, nval, strvalを移し替え
@@ -129,33 +117,33 @@ private:
       if (i < threshhold)
         leaf_insert_nonfull(node, key, nval, strval, i);
       else
-        leaf_insert_nonfull(new_sibling, key, nval, strval, i - threshhold);
+        leaf_insert_nonfull(new_sibling.get(), key, nval, strval, i - threshhold);
       //分割したこと（境界値、左側、右側）をお知らせする
       was_split = true;
       result->key = new_sibling->keys[0]; //分割した時の境界値
       result->left = node;
-      result->right = new_sibling;
+      result->right = new_sibling.get();
     }
     else //分割しなくてもいいので
       leaf_insert_nonfull(node, key, nval, strval, i);
     return was_split;
   }
 
-  void inner_insert_nonfull(InnerNode *node, unsigned depth, int &key, int nval, string strval)
+  void inner_insert_nonfull(InnerNode *node, unsigned depth, const int &key, const int nval, const std::string strval)
   {
     //分割しなくてもいけるとき、nodeに添字がindexの場所にkey, num, sを入れる
     unsigned index = inner_position_for(key, node->keys, node->num_keys); //ちょうどいいところを選ぶ
-    InsertionResult result;
+    InsertionResult *result;
     bool was_split;
     if (depth - 1 == 0)
     {
       //childrenがleafの時kleafは分割したのかcheckかつleafに値挿入
-      was_split = leaf_insert(reinterpret_cast<LeafNode *>(node->children[index]), key, nval, strval, &result);
+      was_split = leaf_insert(node->children[index].get(), key, nval, strval, result);
     }
     else
     {
       //再帰的にinnerに対して挿入していって、分割するのかcheck
-      InnerNode *child = reinterpret_cast<InnerNode *>(node->children[index]);
+      std::unique_ptr<NodeBase> child = std::unique_ptr<InnerNode>(node->children[index]).get();
       was_split = inner_insert(child, depth - 1, key, nval, strval, &result);
     }
     if (was_split)
@@ -185,7 +173,7 @@ private:
     }
   }
 
-  bool inner_insert(InnerNode *node, unsigned depth, int &key, int &nval, string &strval, InsertionResult *result)
+  bool inner_insert(std::unique_ptr<InnerNode> &node, unsigned depth, const int &key, const int &nval, const std::string &strval, InsertionResult &result)
   {
     //innerにkey,nval,strvalを挿入してそっからleafまで辿って行って結果をresultに。その時nodeを分割したかどうか返す
     bool was_split = false;
@@ -193,16 +181,16 @@ private:
     {
       //nodeの容量がいっぱいなら
       unsigned threshhold = (inum + 1) / 2;                //閾値というか要素数の真ん中を設定（切り上げ）
-      InnerNode *new_sibling = new InnerNode();            //分割したnodeのindexが大きい方（兄）
+      std::unique_ptr<InnerNode> new_sibling;              //分割したnodeのindexが大きい方（兄）
       new_sibling->num_keys = node->num_keys - threshhold; //さっき作った兄の要素数を入れる
       for (unsigned i = 0; i < new_sibling->num_keys; ++i)
       {
         //兄の方に入れる予定のkey, childrenを移し替え
         new_sibling->keys[i] = node->keys[threshhold + i];
-        new_sibling->children[i] = node->children[threshhold + i];
+        new_sibling->children[i] = node->children[threshhold + i].get();
       }
-      new_sibling->children[new_sibling->num_keys] = node->children[node->num_keys]; //keyよりchildrenの方が1つ要素が多いので
-      node->num_keys = threshhold - 1;                                               //分割されたnodeをindexが小さい方にする（弟）ので、要素数を変更
+      new_sibling->children[new_sibling->num_keys] = node->children[node->num_keys].get(); //keyよりchildrenの方が1つ要素が多いので
+      node->num_keys = threshhold - 1;                                                     //分割されたnodeをindexが小さい方にする（弟）ので、要素数を変更
       //分割したこと（境界値、左側、右側）をお知らせする
       was_split = true;
       result->key = node->keys[threshhold - 1];
@@ -227,20 +215,20 @@ public:
   BPlusTree()
   {
     depth = 0;
-    root = new LeafNode();
+    root = std::make_unique<NodeBase>();
   };
   ~BPlusTree(){};
 
-  bool find(const int &key, int *nval = 0, string *strval = 0)
+  bool find(const int &key, int *nval = 0, std::string *strval = 0)
   {
     //keyがあるかcheck。またその値が欲しければ第2, 3引数に変数を入れる。
-    InnerNode *inner;
-    NodeBase *node = root;
+    NodeBase *inner;
+    NodeBase *node = root.get();
     unsigned d = depth, index;
     while (d-- != 0)
     {
       //一番下（leaf）までkeyの位置に注意しながら降りていく
-      inner = reinterpret_cast<InnerNode *>(node);
+      inner = node;
       index = inner_position_for(key, inner->keys, inner->num_keys);
       node = inner->children[index];
     }
@@ -268,28 +256,30 @@ public:
       return false;
   }
 
-  void insert(int key, int nval, string strval)
+  void insert(int key, int nval, std::string strval)
   {
     //key, nval, strvalを挿入（または更新）
-    InsertionResult result;
+    InsertionResult *result;
     bool was_split;
     if (depth == 0)
     {
+      std::unique_ptr<LeafNode> root = std::move(root);
       //rootがleafなら、そのままleafに挿入
-      was_split = leaf_insert(reinterpret_cast<LeafNode *>(root), key, nval, strval, &result);
+      was_split = leaf_insert(root.get(), key, nval, strval, result);
     }
     else
     {
+      std::unique_ptr<InnerNode> root = std::move(root);
       //rootがinnerなら、innerに代入して再帰的にchildrenを見て、innerになければ最終innerとleafに挿入。あればleafのみ更新する
-      was_split = inner_insert(reinterpret_cast<InnerNode *>(root), depth, key, nval, strval, &result);
+      was_split = inner_insert(root, depth, key, nval, strval, result);
     }
     if (was_split)
     {
       //rootが分割されたら、新しくrootを作り直す
-      depth++;                                                    //深さが1つ増えるので
-      root = new InnerNode();                                     //rootを初期化
-      InnerNode *rootProxy = reinterpret_cast<InnerNode *>(root); //rootをポインタ（代理）から書き換える
-      rootProxy->num_keys = 1;                                    //現在新しく作られたところだから、要素は1つのみ
+      depth++;                              //深さが1つ増えるので
+      root = std::make_unique<InnerNode>(); //rootを初期化
+      InnerNode *rootProxy = root.get();    //rootをポインタ（代理）から書き換える
+      rootProxy->num_keys = 1;              //現在新しく作られたところだから、要素は1つのみ
       //rootを分割するということは、resultで返ってきたやつは新しくrootに入るべきものなので
       rootProxy->keys[0] = result.key;
       rootProxy->children[0] = result.left;
