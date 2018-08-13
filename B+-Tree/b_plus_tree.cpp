@@ -5,42 +5,45 @@
 #include <memory>
 #include <string>
 
-const unsigned int maxLeafNum = 2;
-const unsigned int maxInnerNum = 2;
-const unsigned int minLeafNum = (maxLeafNum + 1) / 2;
-const unsigned int minInnerNum = (maxInnerNum + 1) / 2;
+const size_t maxLeafNum = 2;
+const size_t maxInnerNum = 2;
+const size_t minLeafNum = (maxLeafNum + 1) / 2;
+const size_t minInnerNum = (maxInnerNum + 1) / 2;
 
 /*
 * ノードの構造体(抽象型)
+* @param 要素数確保
+* @detail num_keys ノード内のキーの個数, keys キー配列
 */
 struct NodeBase
 {
-  unsigned num_keys; //node内のkeyの数
-  std::vector<int> keys;
-  NodeBase(int num) : num_keys(0), keys(std::vector<int>(num)) {}
+  size_t num_keys;
+  std::vector<size_t> keys;
+  NodeBase(size_t num) : num_keys(0), keys(num) {}
   virtual ~NodeBase() {}
 };
 
 /*
 * 葉ノードの構造体
 * @param maxLeafNum 要素数確保
+* @detail numval 数値配列, value 文字列配列
 */
 struct LeafNode : NodeBase
 {
-  std::vector<int> nval;
-  std::vector<std::string> strval;
-  LeafNode() : NodeBase(maxLeafNum), nval(std::vector<int>(maxLeafNum)), strval(std::vector<std::string>(maxLeafNum)) {}
+  std::vector<std::string> value;
+  LeafNode() : NodeBase(maxLeafNum), value(maxLeafNum) {}
   ~LeafNode() {}
 };
 
 /*
 * 内部ノードの構造体
 * @param maxInnerNum 要素数確保
+* @detail childref 子ノードへの参照配列
 */
 struct InnerNode : NodeBase
 {
-  std::vector<std::unique_ptr<NodeBase>> children;
-  InnerNode() : NodeBase(maxInnerNum), children(std::vector<std::unique_ptr<NodeBase>>(maxInnerNum + 1)) {}
+  std::vector<std::unique_ptr<NodeBase>> childref;
+  InnerNode() : NodeBase(maxInnerNum), childref(maxInnerNum + 1) {}
   ~InnerNode() {}
 };
 
@@ -49,11 +52,9 @@ struct InnerNode : NodeBase
 */
 struct InsertionResult
 {
-  int key;         //insertしたkeyの値
-  NodeBase *left;  //左に何がいるのか
-  NodeBase *right; //右に何がいるのか
-  InsertionResult() {}
-  ~InsertionResult() {}
+  size_t key;                      //insertしたkeyの値
+  std::unique_ptr<NodeBase> left;  //左に何がいるのか
+  std::unique_ptr<NodeBase> right; //右に何がいるのか
 };
 
 /*
@@ -62,7 +63,7 @@ struct InsertionResult
 class BPlusTree
 {
 private:
-  unsigned depth;
+  unsigned int depth;
   std::unique_ptr<NodeBase> root;
 
   /*
@@ -73,9 +74,9 @@ private:
   * @return キーのインデックス(なければそのキー以下のインデックス)
   * @note 二分探索で高速化もありだが別になくてもいい気がするので線形探索
   */
-  unsigned leaf_position_for(const int &key, const std::vector<int> &keys, const unsigned num_keys) const
+  unsigned leaf_position_for(const size_t &key, const std::vector<size_t> &keys, const size_t num_keys) const
   {
-    unsigned k = 0;
+    size_t k = 0;
     while ((k < num_keys) && (keys[k] < key))
       ++k;
     return k;
@@ -89,9 +90,9 @@ private:
   * @return 対象キーのインデックス(なければそのキー以下のインデックス)
   * @note 二分探索で高速化もありだが別になくてもいい気がするので線形探索
   */
-  unsigned inner_position_for(const int &key, const std::vector<int> &keys, const unsigned num_keys) const
+  unsigned inner_position_for(const size_t &key, const std::vector<size_t> &keys, const size_t num_keys) const
   {
-    unsigned k = 0;
+    size_t k = 0;
     while ((k < num_keys) && (keys[k] < key))
       ++k;
     return k;
@@ -101,30 +102,27 @@ private:
   * @breif 分割せずに葉ノードに新しい値を挿入
   * @param [LeafNode*]node 挿入するキーがあるところの葉ノード
   * @param [const int&]key 挿入するキー
-  * @param [const int&]nval 挿入する数値
-  * @param [const string&]strval 挿入する文字列
+  * @param [const int&]numval 挿入する数値
+  * @param [const string&]value 挿入する文字列
   * @param [const unsigned int]index キーを挿入する場所のインデックス
   */
-  void leaf_insert_nonfull(LeafNode *node, const int &key, const int &nval, const std::string &strval, const unsigned int index)
+  void leaf_insert_nonfull(std::unique_ptr<LeafNode> node, const size_t &key, const std::string &value, const size_t index)
   {
     // 更新するとき
     if ((index < maxLeafNum) && (node->num_keys != 0) && (node->keys[index] == key))
     {
-      node->nval[index] = nval;
-      node->strval[index] = strval;
+      node->value[index] = value;
     }
     else
     {
-      for (unsigned i = node->num_keys; i > index; --i)
+      for (size_t i = node->num_keys; i > index; --i)
       {
         node->keys[i] = node->keys[i - 1];
-        node->nval[i] = node->nval[i - 1];
-        node->strval[i] = node->strval[i - 1];
+        node->value[i] = node->value[i - 1];
       }
       node->num_keys++;
       node->keys[index] = key;
-      node->nval[index] = nval;
-      node->strval[index] = strval;
+      node->value[index] = value;
     }
   }
 
@@ -132,15 +130,15 @@ private:
   * @breif 葉ノードに新しい値を挿入
   * @param [LeafNode*]node 現在参照されている葉ノード
   * @param [const int&]key 挿入するキー
-  * @param [const int&]nval 挿入する数値
-  * @param [const string&]strval 挿入する文字列
+  * @param [const int&]numval 挿入する数値
+  * @param [const string&]value 挿入する文字列
   * @param [InsertionResult*]result 分割した時の結果
   * @return [bool]was_split 挿入時分割したかどうか
   */
-  bool leaf_insert(LeafNode *node, const int &key, const int &nval, const std::string &strval, InsertionResult *result)
+  bool leaf_insert(std::unique_ptr<LeafNode> node, const size_t &key, const std::string &value, std::unique_ptr<InsertionResult> result)
   {
     bool was_split = false;
-    unsigned int i = leaf_position_for(key, node->keys, node->num_keys);
+    size_t i = leaf_position_for(key, node->keys, node->num_keys);
     if (node->num_keys == maxLeafNum)
     {
       unsigned threshold = minLeafNum;
@@ -149,24 +147,23 @@ private:
       new_sibling->num_keys = node->num_keys - threshold;
       for (unsigned int j = 0; j < new_sibling->num_keys; ++j)
       {
-        //兄の方に入れる予定のkey, nval, strvalを移し替え
+        //兄の方に入れる予定のkey, numval, valueを移し替え
         new_sibling->keys[j] = node->keys[threshold + j];
-        new_sibling->nval[j] = node->nval[threshold + j];
-        new_sibling->strval[j] = node->strval[threshold + j];
+        new_sibling->value[j] = node->value[threshold + j];
       }
       node->num_keys = threshold;
       if (i < threshold)
-        leaf_insert_nonfull(node, key, nval, strval, i);
+        leaf_insert_nonfull(std::move(node), key, value, i);
       else
-        leaf_insert_nonfull(new_sibling.get(), key, nval, strval, i - threshold);
+        leaf_insert_nonfull(std::move(new_sibling), key, value, i - threshold);
       //分割したこと（境界値、小さい方、大きい方）をお知らせする
       was_split = true;
       result->key = new_sibling->keys[0]; //分割した時の境界値
-      result->left = node;
-      result->right = new_sibling.get();
+      result->left = std::move(node);
+      result->right = std::move(new_sibling);
     }
     else //分割しなくてもいいので
-      leaf_insert_nonfull(node, key, nval, strval, i);
+      leaf_insert_nonfull(std::move(node), key, value, i);
     return was_split;
   }
 
@@ -175,23 +172,23 @@ private:
   * @param [InnerNode*]node キーを挿入するところの内部ノード
   * @param [unsigned int]depth 内部ノードの深さ
   * @param [const int&]key 挿入するキー
-  * @param [const int&]nval 挿入する数値
-  * @param [const string&]strval 挿入する文字列
+  * @param [const int&]numval 挿入する数値
+  * @param [const string&]value 挿入する文字列
   */
-  void inner_insert_nonfull(InnerNode *node, unsigned int depth, const int &key, const int nval, const std::string strval)
+  void inner_insert_nonfull(std::unique_ptr<InnerNode> node, unsigned int depth, const size_t &key, const std::string value)
   {
-    unsigned index = inner_position_for(key, node->keys, node->num_keys);
-    InsertionResult *result;
+    size_t index = inner_position_for(key, node->keys, node->num_keys);
+    std::unique_ptr<InsertionResult> result;
     bool was_split;
     if (depth - 1 == 0)
     {
       //葉ノードに挿入
-      was_split = leaf_insert(dynamic_cast<LeafNode *>(node->children[index].get()), key, nval, strval, result);
+      was_split = leaf_insert(std::move(node->childref[index]), key, value, std::move(result));
     }
     else
     {
       //再帰的に内部ノードを走査する
-      was_split = inner_insert(dynamic_cast<InnerNode *>(node->children[index].get()), depth - 1, key, nval, strval, result);
+      was_split = inner_insert(std::move(node->childref[index]), depth - 1, key, value, std::move(result));
     }
     if (was_split)
     {
@@ -199,21 +196,21 @@ private:
       {
         // 一番右側に挿入する場合
         node->keys[index] = result->key;
-        node->children[index] = std::make_unique<NodeBase>(result->left);
-        node->children[index + 1] = std::make_unique<NodeBase>(result->right);
+        node->childref[index] = std::make_unique<NodeBase>(result->left);
+        node->childref[index + 1] = std::make_unique<NodeBase>(result->right);
         node->num_keys++;
       }
       else
       {
         //間に入れるので、一個ずつ大きい方に移動してしてから挿入
-        node->children[node->num_keys + 1] = std::move(node->children[node->num_keys]);
+        node->childref[node->num_keys + 1] = std::move(node->childref[node->num_keys]);
         for (unsigned i = node->num_keys; i != index; --i)
         {
-          node->children[i] = std::move(node->children[i - 1]);
+          node->childref[i] = std::move(node->childref[i - 1]);
           node->keys[i] = node->keys[i - 1];
         }
-        node->children[index] = std::make_unique<NodeBase>(result->left);
-        node->children[index + 1] = std::make_unique<NodeBase>(result->right);
+        node->childref[index] = std::make_unique<NodeBase>(result->left);
+        node->childref[index + 1] = std::make_unique<NodeBase>(result->right);
         node->keys[index] = result->key;
         node->num_keys++;
       }
@@ -225,16 +222,16 @@ private:
   * @param [InnerNode*]node 現在参照している内部ノード
   * @param [unsinged int]depth 内部ノードが存在しているところの深さ
   * @param [const int&]key 挿入するキー
-  * @param [const int&]nval 挿入する数値
-  * @param [const string&]strval 挿入する文字列
+  * @param [const int&]numval 挿入する数値
+  * @param [const string&]value 挿入する文字列
   * @param [InsertionResult*]result 分割した時の結果
   * @return [bool]was_split 挿入時分割したかどうか
   * @detail 新しい値を挿入する->経由する内部ノード内の数は増加するので、
   *         その時全て埋まっていたら分割する。
   */
-  bool inner_insert(InnerNode *node, unsigned int depth, const int &key, const int &nval, const std::string &strval, InsertionResult *result)
+  bool inner_insert(std::unique_ptr<InnerNode> node, unsigned int depth, const size_t &key, const std::string &value, std::unique_ptr<InsertionResult> result)
   {
-    //innerにkey,nval,strvalを挿入してそっからleafまで辿って行って結果をresultに。その時nodeを分割したかどうか返す
+    //innerにkey,numval,valueを挿入してそっからleafまで辿って行って結果をresultに。その時nodeを分割したかどうか返す
     bool was_split = false;
     if (node->num_keys == maxInnerNum)
     {
@@ -245,25 +242,25 @@ private:
       new_sibling->num_keys = node->num_keys - threshold;
       for (unsigned int i = 0; i < new_sibling->num_keys; ++i)
       {
-        //兄の方に入れる予定のkey, childrenを移し替え
+        //兄の方に入れる予定のkey, childrefを移し替え
         new_sibling->keys[i] = node->keys[threshold + i];
-        new_sibling->children[i] = std::move(node->children[threshold + i]);
+        new_sibling->childref[i] = std::move(node->childref[threshold + i]);
       }
-      new_sibling->children[new_sibling->num_keys] = std::move(node->children[node->num_keys]);
+      new_sibling->childref[new_sibling->num_keys] = std::move(node->childref[node->num_keys]);
       node->num_keys = threshold - 1; //分割されたnodeをindexが小さい方にする（弟）ので、要素数を変更
       //分割したこと（境界値、その小さい方、大きい方）をお知らせする
       was_split = true;
       result->key = node->keys[threshold - 1];
-      result->left = node;
-      result->right = new_sibling.get();
+      result->left = std::move(node);
+      result->right = std::move(new_sibling);
       // 分割したどちらに新しい値を挿入するか
       if (key < (result->key))
-        inner_insert_nonfull(node, depth, key, nval, strval);
+        inner_insert_nonfull(std::move(node), depth, key, value);
       else
-        inner_insert_nonfull(new_sibling.get(), depth, key, nval, strval);
+        inner_insert_nonfull(std::move(new_sibling), depth, key, value);
     }
     else //nodeの容量がまだいけるので
-      inner_insert_nonfull(node, depth, key, nval, strval);
+      inner_insert_nonfull(std::move(node), depth, key, value);
     return was_split;
   }
 
@@ -273,7 +270,7 @@ private:
   * @param [int]key 削除するキー
   * @detail 
   */
-  void leaf_delete_nonmerge(LeafNode *node, int key)
+  void leaf_delete_nonmerge(LeafNode *node, size_t &key)
   {
   }
 
@@ -304,22 +301,22 @@ public:
   /*
   * @brief 新たな値を挿入/更新
   * @param [int]key
-  * @param [int]nval
-  * @param [string]strval
+  * @param [int]numval
+  * @param [string]value
   */
-  void insert(int key, int nval, std::string strval)
+  void insert(size_t key, std::string value)
   {
-    InsertionResult *result;
+    std::unique_ptr<InsertionResult> result;
     bool was_split;
     if (depth == 0)
     {
       //rootがleafなら、そのままleafに挿入
-      was_split = leaf_insert(dynamic_cast<LeafNode *>(root.get()), key, nval, strval, result);
+      was_split = leaf_insert(std::move(root), key, value, std::move(result));
     }
     else
     {
-      //rootがinnerなら、innerに代入して再帰的にchildrenを見て、innerになければ最終innerとleafに挿入。あればleafのみ更新する
-      was_split = inner_insert(dynamic_cast<InnerNode *>(root.get()), depth, key, nval, strval, result);
+      //rootがinnerなら、innerに代入して再帰的にchildrefを見て、innerになければ最終innerとleafに挿入。あればleafのみ更新する
+      was_split = inner_insert(std::move(root), depth, key, value, std::move(result));
     }
     if (was_split)
     {
@@ -330,41 +327,32 @@ public:
       rootProxy->num_keys = 1;                                      //現在新しく作られたところだから、要素は1つのみ
       //rootを分割するということは、resultで返ってきたやつは新しくrootに入るべきものなので
       rootProxy->keys[0] = result->key;
-      rootProxy->children[0] = std::make_unique<NodeBase>(result->left);
-      rootProxy->children[1] = std::make_unique<NodeBase>(result->right);
+      rootProxy->childref[0] = std::make_unique<NodeBase>(result->left);
+      rootProxy->childref[1] = std::make_unique<NodeBase>(result->right);
     }
   }
 
-  bool find(const int &key, int *nval = 0, std::string *strval = 0)
+  bool find(const size_t &key, std::string *value = nullptr)
   {
     //keyがあるかcheck。またその値が欲しければ第2, 3引数に変数を入れる。
     InnerNode *inner;
     NodeBase *node = root.get();
-    unsigned d = depth, index;
+    size_t d = depth, index;
     while (d-- != 0)
     {
       //一番下（leaf）までkeyの位置に注意しながら降りていく
       inner = dynamic_cast<InnerNode *>(node);
       index = inner_position_for(key, inner->keys, inner->num_keys);
-      node = inner->children[index].get();
+      node = inner->childref[index].get();
     }
     LeafNode *leaf = reinterpret_cast<LeafNode *>(node);
     index = leaf_position_for(key, leaf->keys, leaf->num_keys);
     if (leaf->keys[index] == key)
     {
       //もしkeyがあれば引数次第で値を代入
-      if (nval != 0 && strval != 0)
+      if (value != 0)
       {
-        *nval = leaf->nval[index];
-        *strval = leaf->strval[index];
-      }
-      else if (nval != 0)
-      {
-        *nval = leaf->nval[index];
-      }
-      else if (strval != 0)
-      {
-        *strval = leaf->strval[index];
+        *value = leaf->value[index];
       }
       return true;
     }
@@ -372,11 +360,11 @@ public:
       return false;
   }
 
-  void delete_data(int &key)
+  void delete_data(size_t &key)
   {
-    }
+  }
 
-  LeafNode select(int &minkey, int &maxkey)
+  LeafNode select(size_t &minkey, size_t &maxkey)
   {
   }
 
