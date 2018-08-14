@@ -135,7 +135,7 @@ private:
   * @param [InsertionResult*]result 分割した時の結果
   * @return [bool]was_split 挿入時分割したかどうか
   */
-  bool leaf_insert(std::unique_ptr<LeafNode> node, const size_t &key, const std::string &value, std::unique_ptr<InsertionResult> result)
+  bool leaf_insert(std::unique_ptr<LeafNode> node, const size_t &key, const std::string &value, InsertionResult result)
   {
     bool was_split = false;
     size_t i = leaf_position_for(key, node->keys, node->num_keys);
@@ -158,9 +158,9 @@ private:
         leaf_insert_nonfull(std::move(new_sibling), key, value, i - threshold);
       //分割したこと（境界値、小さい方、大きい方）をお知らせする
       was_split = true;
-      result->key = new_sibling->keys[0]; //分割した時の境界値
-      result->left = std::move(node);
-      result->right = std::move(new_sibling);
+      result.key = new_sibling->keys[0]; //分割した時の境界値
+      result.left = std::move(node);
+      result.right = std::move(new_sibling);
     }
     else //分割しなくてもいいので
       leaf_insert_nonfull(std::move(node), key, value, i);
@@ -178,7 +178,7 @@ private:
   void inner_insert_nonfull(std::unique_ptr<InnerNode> node, unsigned int depth, const size_t &key, const std::string value)
   {
     size_t index = inner_position_for(key, node->keys, node->num_keys);
-    std::unique_ptr<InsertionResult> result;
+    InsertionResult result;
     bool was_split;
     if (depth - 1 == 0)
     {
@@ -195,9 +195,9 @@ private:
       if (index == node->num_keys)
       {
         // 一番右側に挿入する場合
-        node->keys[index] = result->key;
-        node->childref[index] = std::make_unique<NodeBase>(result->left);
-        node->childref[index + 1] = std::make_unique<NodeBase>(result->right);
+        node->keys[index] = result.key;
+        node->childref[index] = std::move(result.left);
+        node->childref[index + 1] = std::move(result.right);
         node->num_keys++;
       }
       else
@@ -209,9 +209,9 @@ private:
           node->childref[i] = std::move(node->childref[i - 1]);
           node->keys[i] = node->keys[i - 1];
         }
-        node->childref[index] = std::make_unique<NodeBase>(result->left);
-        node->childref[index + 1] = std::make_unique<NodeBase>(result->right);
-        node->keys[index] = result->key;
+        node->childref[index] = std::move(result.left);
+        node->childref[index + 1] = std::move(result.right);
+        node->keys[index] = result.key;
         node->num_keys++;
       }
     }
@@ -229,7 +229,7 @@ private:
   * @detail 新しい値を挿入する->経由する内部ノード内の数は増加するので、
   *         その時全て埋まっていたら分割する。
   */
-  bool inner_insert(std::unique_ptr<InnerNode> node, unsigned int depth, const size_t &key, const std::string &value, std::unique_ptr<InsertionResult> result)
+  bool inner_insert(std::unique_ptr<InnerNode> node, unsigned int depth, const size_t &key, const std::string &value, InsertionResult result)
   {
     //innerにkey,numval,valueを挿入してそっからleafまで辿って行って結果をresultに。その時nodeを分割したかどうか返す
     bool was_split = false;
@@ -250,11 +250,11 @@ private:
       node->num_keys = threshold - 1; //分割されたnodeをindexが小さい方にする（弟）ので、要素数を変更
       //分割したこと（境界値、その小さい方、大きい方）をお知らせする
       was_split = true;
-      result->key = node->keys[threshold - 1];
-      result->left = std::move(node);
-      result->right = std::move(new_sibling);
+      result.key = node->keys[threshold - 1];
+      result.left = std::move(node);
+      result.right = std::move(new_sibling);
       // 分割したどちらに新しい値を挿入するか
-      if (key < (result->key))
+      if (key < (result.key))
         inner_insert_nonfull(std::move(node), depth, key, value);
       else
         inner_insert_nonfull(std::move(new_sibling), depth, key, value);
@@ -306,16 +306,18 @@ public:
   */
   void insert(size_t key, std::string value)
   {
-    std::unique_ptr<InsertionResult> result;
+    InsertionResult result;
     bool was_split;
     if (depth == 0)
     {
       //rootがleafなら、そのままleafに挿入
+      std::unique_ptr<LeafNode> root = std::move(root);
       was_split = leaf_insert(std::move(root), key, value, std::move(result));
     }
     else
     {
       //rootがinnerなら、innerに代入して再帰的にchildrefを見て、innerになければ最終innerとleafに挿入。あればleafのみ更新する
+      std::unique_ptr<InnerNode> root = std::move(root);
       was_split = inner_insert(std::move(root), depth, key, value, std::move(result));
     }
     if (was_split)
@@ -326,9 +328,9 @@ public:
       InnerNode *rootProxy = dynamic_cast<InnerNode *>(root.get()); //rootをポインタ（代理）から書き換える
       rootProxy->num_keys = 1;                                      //現在新しく作られたところだから、要素は1つのみ
       //rootを分割するということは、resultで返ってきたやつは新しくrootに入るべきものなので
-      rootProxy->keys[0] = result->key;
-      rootProxy->childref[0] = std::make_unique<NodeBase>(result->left);
-      rootProxy->childref[1] = std::make_unique<NodeBase>(result->right);
+      rootProxy->keys[0] = result.key;
+      rootProxy->childref[0] = std::make_unique<NodeBase>(result.left);
+      rootProxy->childref[1] = std::make_unique<NodeBase>(result.right);
     }
   }
 
