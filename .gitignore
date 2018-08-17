@@ -2,4 +2,6 @@
 .vscode/
 .commit_template
 cybozulib/
+a.out
+a.out.dSYM/
 book.md
